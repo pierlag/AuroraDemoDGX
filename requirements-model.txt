@@ -1,0 +1,14 @@
+# Dépendances nécessaires pour exécuter réellement le modèle Aurora.
+# Installables depuis la console d'administration ou manuellement :
+#   .venv/bin/pip install -r requirements-model.txt
+#
+# Sur GPU NVIDIA, installez d'abord la variante PyTorch correspondant à votre
+# version de CUDA : https://pytorch.org/get-started/locally/
+
+torch>=2.2
+microsoft-aurora>=2.0
+
+# Conditions initiales ERA5 (Copernicus Climate Data Store)
+cdsapi>=0.7
+xarray>=2024.1
+netCDF4>=1.6

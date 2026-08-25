@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurora France — Station de prévision</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div class="aurora-bg"></div>
+<div class="aurora-veil"></div>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">◈</div>
+      <div class="brand-text">
+        <b>Aurora France</b>
+        <span>Station de prévision</span>
+      </div>
+    </div>
+
+    <nav class="var-switch" id="var-switch"></nav>
+
+    <div class="topbar-right">
+      <span class="pill muted" id="model-pill"><i class="dot"></i><span>Modèle…</span></span>
+      <span class="pill muted" id="data-pill" title="Origine des conditions initiales"></span>
+      <a class="link-admin" href="/admin">⚙ Administration</a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- =============== Colonne gauche : pilotage =============== -->
+    <aside class="side scroll">
+      <section class="glass card">
+        <div class="section-title">Nouvelle prévision</div>
+
+        <div class="field">
+          <label for="src">Conditions initiales</label>
+          <select id="src"></select>
+          <p class="mono" id="src-hint" style="font-size:10.5px;color:var(--muted);margin:6px 0 0;line-height:1.45"></p>
+        </div>
+
+        <div class="field">
+          <label for="base-time">Réseau d'initialisation (UTC)</label>
+          <input type="datetime-local" id="base-time" step="21600">
+          <p class="mono" id="date-hint" style="font-size:10.5px;color:var(--muted);margin:6px 0 0;line-height:1.45"></p>
+        </div>
+
+        <div class="field">
+          <label for="steps">Échéance : <b id="steps-label" class="mono">120 h</b></label>
+          <input type="range" id="steps" min="2" max="40" value="20">
+        </div>
+
+        <div class="field">
+          <label for="members">Membres d'ensemble : <b id="members-label" class="mono">1</b></label>
+          <input type="range" id="members" min="1" max="8" value="1">
+        </div>
+
+        <button class="btn btn-primary btn-block" id="run-btn">▶ Lancer la prévision</button>
+
+        <div class="job-box" id="job-box" hidden>
+          <div class="msg" id="job-msg"></div>
+          <div class="progress"><i id="job-bar"></i></div>
+        </div>
+      </section>
+
+      <section class="glass card" id="meta-card" hidden>
+        <div class="section-title">Exécution courante</div>
+        <div class="run-summary" id="run-summary"></div>
+      </section>
+
+      <section class="glass card">
+        <div class="section-title">Historique</div>
+        <div id="history"></div>
+      </section>
+
+      <section class="glass card">
+        <div class="section-title">Couches</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:12.5px">
+          <label style="display:flex;align-items:center;gap:9px;cursor:pointer">
+            <input type="checkbox" id="lay-wind" checked> Particules de vent</label>
+          <label style="display:flex;align-items:center;gap:9px;cursor:pointer">
+            <input type="checkbox" id="lay-iso" checked> Isobares (4 hPa)</label>
+          <label style="display:flex;align-items:center;gap:9px;cursor:pointer">
+            <input type="checkbox" id="lay-cities" checked> Villes</label>
+          <label style="display:flex;align-items:center;gap:9px;cursor:pointer">
+            <input type="checkbox" id="lay-grid"> Graticule</label>
+        </div>
+      </section>
+    </aside>
+
+    <!-- =============== Centre : carte =============== -->
+    <section class="stage">
+      <div class="canvas-wrap" id="canvas-wrap">
+        <canvas id="layer-field"></canvas>
+        <canvas id="layer-wind"></canvas>
+        <canvas id="layer-vector"></canvas>
+
+        <div class="stage-overlay badge-row" id="badges"></div>
+
+        <div class="stage-overlay map-title">
+          <h2 id="map-var">—</h2>
+          <p id="map-sub">Aucune prévision chargée</p>
+        </div>
+
+        <div class="stage-overlay legend" id="legend" hidden>
+          <div class="legend-head">
+            <b id="legend-label">—</b><span id="legend-unit"></span>
+          </div>
+          <div class="legend-bar" id="legend-bar"></div>
+          <div class="legend-ticks" id="legend-ticks"></div>
+        </div>
+
+        <div class="stage-overlay map-tools">
+          <button class="tool-btn active" id="t-wind" title="Particules de vent">🌬</button>
+          <button class="tool-btn active" id="t-iso" title="Isobares">◎</button>
+          <button class="tool-btn active" id="t-cities" title="Villes">📍</button>
+        </div>
+
+        <div class="cursor-readout" id="readout"></div>
+
+        <div id="stage-empty" class="stage-overlay" style="inset:0;display:grid;place-items:center">
+          <div class="empty-state" style="max-width:390px">
+            <span class="big">🛰</span>
+            <b style="color:var(--text);font-size:15px">Aucune prévision en mémoire</b><br>
+            Chargez un modèle depuis la <a href="/admin" style="color:var(--accent)">console d'administration</a>,
+            puis lancez une prévision depuis le panneau de gauche.
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline">
+        <button class="play-btn" id="play" disabled>▶</button>
+        <div class="timeline-main">
+          <div class="timeline-head">
+            <b id="tl-time">—</b>
+            <span class="lead mono" id="tl-lead"></span>
+          </div>
+          <input type="range" id="tl-range" min="0" max="0" step="0.02" value="0" disabled>
+          <div class="ticks" id="tl-ticks"></div>
+        </div>
+        <select class="speed-select" id="speed">
+          <option value="0.6">×0,5</option>
+          <option value="1.2" selected>×1</option>
+          <option value="2.4">×2</option>
+          <option value="4.8">×4</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- =============== Colonne droite : détail =============== -->
+    <aside class="side scroll">
+      <section class="glass card" id="city-card">
+        <div class="city-header">
+          <div>
+            <div class="city-name" id="city-name">Paris</div>
+            <div class="city-coords mono" id="city-coords">48.86 N · 2.35 E</div>
+          </div>
+          <div style="font-size:30px;line-height:1" id="city-icon">—</div>
+        </div>
+        <div class="city-hero">
+          <div class="city-temp" id="city-temp">—</div>
+          <div class="city-cond" id="city-cond"></div>
+        </div>
+        <div class="metric-grid" id="city-metrics"></div>
+        <canvas class="meteogram" id="meteogram"></canvas>
+      </section>
+
+      <section class="glass card">
+        <div class="section-title"><span id="rank-title">Classement</span></div>
+        <div class="ranking" id="ranking"></div>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

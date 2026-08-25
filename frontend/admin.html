@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurora France — Administration</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙</text></svg>">
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/admin.css">
+</head>
+<body class="admin scrollable">
+<div class="aurora-bg"></div>
+<div class="aurora-veil"></div>
+
+<div class="admin-shell">
+  <header class="admin-top">
+    <div class="brand">
+      <div class="brand-mark">⚙</div>
+      <div>
+        <h1>Console d'administration</h1>
+        <div class="sub" id="host-line">—</div>
+      </div>
+    </div>
+    <div class="admin-actions">
+      <span class="pill muted" id="access-pill"><i class="dot"></i>Réseau…</span>
+      <span class="pill muted" id="sse-pill"><i class="dot"></i>Flux…</span>
+      <span class="pill muted" id="state-pill"><i class="dot"></i>—</span>
+      <a class="link-admin" href="/">↩ Retour à la carte</a>
+    </div>
+  </header>
+
+  <div class="admin-grid">
+    <!-- ============ Colonne 1 : machine ============ -->
+    <div class="stack">
+      <section class="glass panel">
+        <div class="section-title">Ressources machine</div>
+        <div id="gauges"></div>
+      </section>
+
+      <section class="glass panel">
+        <div class="section-title">Accès réseau</div>
+        <div class="spec-list" id="access-box"></div>
+        <p style="font-size:10.8px;color:var(--muted);line-height:1.5;margin:10px 0 0">
+          Les postes distants peuvent consulter les prévisions. Le chargement de modèle,
+          l'installation de dépendances et la purge du cache exigent un jeton
+          (<code>AURORA_ADMIN_TOKEN</code>) dès qu'ils ne viennent pas de la machine hôte.
+        </p>
+      </section>
+
+      <section class="glass panel">
+        <div class="section-title">Configuration</div>
+        <div class="spec-list" id="specs"></div>
+      </section>
+
+      <section class="glass panel">
+        <div class="section-title">Dépendances</div>
+        <div class="dep-grid" id="deps"></div>
+        <button class="btn btn-block btn-sm" id="install-btn" style="margin-top:11px">
+          ⤓ Installer PyTorch + microsoft-aurora
+        </button>
+        <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text-dim);margin-top:9px">
+          <input type="checkbox" id="install-era5"> Ajouter le client ERA5 (cdsapi, xarray, netCDF4)
+        </label>
+        <p style="font-size:10.8px;color:var(--muted);line-height:1.5;margin:9px 0 0">
+          L'installation se fait dans l'environnement Python de ce serveur et peut
+          représenter plusieurs gigaoctets de téléchargement.
+        </p>
+      </section>
+
+      <section class="glass panel">
+        <div class="section-title">Cache des poids</div>
+        <div id="cache-box"></div>
+        <button class="btn btn-danger btn-block btn-sm" id="purge-btn" style="margin-top:10px">
+          🗑 Purger le cache HuggingFace
+        </button>
+      </section>
+    </div>
+
+    <!-- ============ Colonne 2 : modèles ============ -->
+    <div class="stack">
+      <section class="glass panel">
+        <div class="section-title">Modèle en mémoire</div>
+        <div class="active-box idle" id="active-box">
+          <div class="pill muted" id="active-pill"><i class="dot"></i>Aucun modèle</div>
+          <div class="active-name" id="active-name">—</div>
+          <div class="active-stage" id="active-stage"></div>
+          <div class="progress" style="margin:10px 0 12px"><i id="active-bar"></i></div>
+          <div class="spec-list" id="active-specs"></div>
+          <div style="display:flex;gap:9px;margin-top:13px">
+            <button class="btn btn-danger" id="unload-btn" disabled>⏏ Décharger</button>
+            <button class="btn btn-sm" id="refresh-btn">↻ Rafraîchir</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="glass panel">
+        <div class="section-title">Catalogue Aurora</div>
+        <div class="model-grid" id="models"></div>
+      </section>
+
+      <!-- ============ Partage public ============ -->
+      <section class="glass panel">
+        <div class="section-title">Démonstration publique</div>
+
+        <div class="share-step">
+          <div class="share-head">
+            <span class="step-no">1</span>
+            <div>
+              <b>Tunnel public</b>
+              <p>Expose cette station derrière une URL accessible depuis Internet.</p>
+            </div>
+            <span class="pill muted" id="tunnel-pill"><i class="dot"></i>—</span>
+          </div>
+          <div class="share-body">
+            <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+              <select id="tunnel-provider" style="flex:1;min-width:200px"></select>
+              <button class="btn btn-primary btn-sm" id="tunnel-start">Ouvrir le tunnel</button>
+              <button class="btn btn-danger btn-sm" id="tunnel-stop" disabled>Fermer</button>
+            </div>
+            <p class="share-hint" id="tunnel-hint"></p>
+            <div class="url-box" id="tunnel-url-box" hidden>
+              <a id="tunnel-url" href="#" target="_blank" rel="noopener noreferrer"></a>
+              <button class="btn btn-sm" id="tunnel-copy">Copier</button>
+            </div>
+            <div class="notice-inline" id="tunnel-warning" hidden></div>
+          </div>
+        </div>
+
+        <div class="share-step">
+          <div class="share-head">
+            <span class="step-no">2</span>
+            <div>
+              <b>Compte GitHub</b>
+              <p>Connexion par « device flow » : aucun mot de passe ne transite ici.</p>
+            </div>
+            <span class="pill muted" id="gh-pill"><i class="dot"></i>—</span>
+          </div>
+          <div class="share-body">
+            <div id="gh-anon">
+              <button class="btn btn-primary btn-sm" id="gh-login">Se connecter à GitHub</button>
+              <div class="device-box" id="gh-device" hidden>
+                <p>Ouvrez <a id="gh-verify" href="#" target="_blank" rel="noopener noreferrer"></a>
+                  puis saisissez ce code :</p>
+                <div class="device-code" id="gh-code">————</div>
+                <p class="share-hint" id="gh-poll-status">En attente d'autorisation…</p>
+              </div>
+            </div>
+            <div id="gh-user" hidden>
+              <div class="gh-identity">
+                <img id="gh-avatar" alt="" width="38" height="38">
+                <div>
+                  <b id="gh-login-name"></b>
+                  <p id="gh-full-name"></p>
+                </div>
+                <button class="btn btn-sm btn-danger" id="gh-logout"
+                        style="margin-left:auto">Déconnexion</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="share-step">
+          <div class="share-head">
+            <span class="step-no">3</span>
+            <div>
+              <b>Publier dans un dépôt privé</b>
+              <p>Crée l'issue « <span id="issue-title">Public demo</span> », ou la commente
+                 si elle existe déjà.</p>
+            </div>
+            <span class="pill muted" id="publish-pill"><i class="dot"></i>—</span>
+          </div>
+          <div class="share-body">
+            <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+              <select id="repo-select" style="flex:1;min-width:220px" disabled></select>
+              <button class="btn btn-sm" id="repo-refresh" disabled>↻</button>
+              <button class="btn btn-primary btn-sm" id="publish-btn" disabled>Publier</button>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;
+                          color:var(--text-dim);margin-top:9px">
+              <input type="checkbox" id="repo-private-only" checked> Dépôts privés uniquement
+            </label>
+            <p class="share-hint" id="publish-hint"></p>
+            <div class="url-box" id="publish-result" hidden>
+              <a id="publish-link" href="#" target="_blank" rel="noopener noreferrer"></a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============ Colonne 3 : journal & sources ============ -->
+    <div class="stack">
+      <section class="glass panel">
+        <div class="section-title">Journal temps réel</div>
+        <div class="console-bar">
+          <label><input type="checkbox" id="autoscroll" checked> Défilement auto</label>
+          <button class="btn btn-sm" id="clear-log" style="margin-left:auto">Effacer</button>
+        </div>
+        <div class="console scroll" id="console"></div>
+      </section>
+
+      <section class="glass panel">
+        <div class="section-title">Sources de données</div>
+        <div id="sources"></div>
+      </section>
+
+      <section class="glass panel">
+        <div class="section-title">Avertissement</div>
+        <p style="font-size:11.6px;line-height:1.6;color:var(--text-dim);margin:0">
+          Aurora est un modèle de <b>recherche</b>. Ses sorties ne constituent pas un service
+          météorologique opérationnel et ne doivent pas servir de base à des décisions
+          critiques sans validation par un expert du domaine. Le simulateur local intégré
+          produit des champs fictifs, uniquement destinés à la démonstration de l'interface.
+        </p>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/js/admin.js"></script>
+</body>
+</html>
