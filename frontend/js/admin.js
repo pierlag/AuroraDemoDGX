@@ -53,6 +53,7 @@ async function boot() {
   applyTunnel(data.tunnel);
   applyGithub(data.github);
   refreshCache();
+  refreshStorage();
 
   const { logs } = await API.get('/logs');
   logs.forEach((entry) => appendLog(entry.data, entry.ts));
@@ -65,7 +66,7 @@ async function boot() {
     log: (d) => appendLog(d),
     dependencies: () => refreshSystem(),
     job: (d) => {
-      if (d.status === 'done' || d.status === 'error') refreshSystem();
+      if (d.status === 'done' || d.status === 'error') { refreshSystem(); refreshStorage(); }
     },
   });
 
@@ -76,6 +77,7 @@ function bindUi() {
   $('unload-btn').addEventListener('click', unloadModel);
   $('refresh-btn').addEventListener('click', () => { refreshSystem(); refreshCache(); });
   $('purge-btn').addEventListener('click', purgeCache);
+  $('storage-clear').addEventListener('click', clearForecastStorage);
   $('install-btn').addEventListener('click', installDeps);
   $('clear-log').addEventListener('click', () => { $('console').innerHTML = ''; });
 
@@ -221,6 +223,65 @@ async function purgeCache() {
     await withAdmin(() => API.del('/models/cache'));
     toast('Cache purgé', 'ok');
     refreshCache();
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+/* --- prévisions enregistrées --------------------------------------------- */
+
+async function refreshStorage() {
+  try {
+    const { forecasts, storage } = await API.get('/forecasts');
+    $('storage-box').innerHTML = [
+      ['Entrées', `${storage.count} / ${storage.max_stored}`],
+      ['Espace occupé', fmt.bytes(storage.bytes / 1024 ** 2)],
+      ['Emplacement', storage.path],
+    ].map(([k, v]) => `<div class="spec"><span>${k}</span><b>${escapeHtml(String(v))}</b></div>`)
+      .join('');
+
+    const list = $('stored-list');
+    if (!forecasts.length) {
+      list.innerHTML = '<div style="font-size:11.5px;color:var(--muted);padding:6px 0">'
+        + 'Aucune prévision enregistrée.</div>';
+    } else {
+      list.innerHTML = '';
+      for (const f of forecasts) {
+        const row = document.createElement('div');
+        row.className = 'stored-item';
+        row.innerHTML = `<div class="info">
+            <b>${escapeHtml(f.model_name || f.model_id)}</b>
+            <span>${fmt.full(f.base_time)} · ${f.steps}×${f.step_hours} h ·
+              ${f.real_data ? 'ERA5' : 'démo'}</span>
+          </div>
+          <span class="size">${fmt.bytes((f.stored_bytes || 0) / 1024 ** 2)}</span>
+          <button title="Supprimer">×</button>`;
+        row.querySelector('button').addEventListener('click', () => removeStored(f));
+        list.appendChild(row);
+      }
+    }
+    $('storage-clear').disabled = !storage.count;
+  } catch { /* ignore */ }
+}
+
+async function removeStored(entry) {
+  if (!confirm(`Supprimer cette prévision ?\n\n${entry.model_name} — ${fmt.full(entry.base_time)}`)) {
+    return;
+  }
+  try {
+    await withAdmin(() => API.del(`/forecasts/${entry.id}`));
+    refreshStorage();
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+async function clearForecastStorage() {
+  if (!confirm('Supprimer toutes les prévisions enregistrées ?')) return;
+  try {
+    const result = await withAdmin(() => API.del('/forecasts'));
+    if (result) toast(`${result.removed} prévision(s) supprimée(s)`, 'ok');
+    refreshStorage();
   } catch (err) {
     toast(err.message, 'err');
   }

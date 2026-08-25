@@ -408,8 +408,20 @@
 }
 .notice b { color: var(--warn); }
 
+.history-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  margin-bottom: 9px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.history-bar .btn { padding: 4px 9px; font-size: 11px; }
+
 .history-item {
-  padding: 8px 10px;
+  position: relative;
+  padding: 8px 26px 8px 10px;
   border-radius: 10px;
   border: 1px solid var(--stroke);
   background: rgba(255, 255, 255, 0.03);
@@ -422,6 +434,25 @@
 .history-item.active { border-color: rgba(76, 201, 255, 0.55); background: rgba(76, 201, 255, 0.1); }
 .history-item b { display: block; font-size: 12px; margin-bottom: 2px; }
 .history-item span { color: var(--muted); }
+
+.history-del {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.14s;
+}
+.history-item:hover .history-del { opacity: 1; }
+.history-del:hover { background: rgba(255, 107, 122, 0.2); color: var(--err); }
 
 .empty-state {
   text-align: center;

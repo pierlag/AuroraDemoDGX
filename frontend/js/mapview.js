@@ -408,9 +408,16 @@ export class MapView {
     ctx.save();
     ctx.font = `600 ${11 * dpr}px var(--sans, sans-serif)`;
     ctx.textBaseline = 'middle';
-    for (const city of this.cities) {
+
+    // Les plus grandes villes sont trait\u00e9es d'abord : en cas de chevauchement,
+    // ce sont les \u00e9tiquettes secondaires qui c\u00e8dent la place.
+    const ordered = this.cities
+      .filter((c) => c.major || (this.selected && this.selected.name === c.name))
+      .sort((a, b) => (b.pop || 0) - (a.pop || 0));
+    const drawn = [];
+
+    for (const city of ordered) {
       const isSel = this.selected && this.selected.name === city.name;
-      if (!city.major && !isSel) continue;
       const [x, y] = this.project(city.lon, city.lat);
       const value = frame ? this.sample(frame, city.lat, city.lon) : NaN;
 
@@ -426,14 +433,26 @@ export class MapView {
         ? `${city.name}  ${this.formatValue(value)}`
         : city.name;
       ctx.textAlign = 'left';
-      const tx = x + 8 * dpr;
       const tw = ctx.measureText(label).width;
+      const box = {
+        x: x + 4 * dpr,
+        y: y - 9 * dpr,
+        w: tw + 8 * dpr,
+        h: 18 * dpr,
+      };
+      const collides = drawn.some((r) => !(
+        box.x + box.w < r.x || r.x + r.w < box.x
+        || box.y + box.h < r.y || r.y + r.h < box.y
+      ));
+      if (collides && !isSel) continue;
+      drawn.push(box);
+
       ctx.fillStyle = 'rgba(5, 9, 20, 0.72)';
       ctx.beginPath();
-      ctx.roundRect(tx - 4 * dpr, y - 9 * dpr, tw + 8 * dpr, 18 * dpr, 5 * dpr);
+      ctx.roundRect(box.x, box.y, box.w, box.h, 5 * dpr);
       ctx.fill();
       ctx.fillStyle = isSel ? '#a7e2ff' : 'rgba(255,255,255,0.94)';
-      ctx.fillText(label, tx, y + 0.5 * dpr);
+      ctx.fillText(label, x + 8 * dpr, y + 0.5 * dpr);
     }
     ctx.restore();
   }

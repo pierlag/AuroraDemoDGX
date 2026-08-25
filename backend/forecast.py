@@ -17,7 +17,10 @@ from .events import bus
 from .geo import CITIES, france_mask, render_grid
 from .model_manager import manager
 from .registry import MODELS_BY_ID, VARIABLES
+from . import storage
 
+# Nombre de jeux de champs gardés en mémoire vive. Les autres restent sur disque
+# et sont rechargés à la demande.
 _MAX_CACHED = 4
 _forecasts: OrderedDict[str, dict] = OrderedDict()
 _jobs: OrderedDict[str, dict] = OrderedDict()
@@ -163,11 +166,42 @@ def get_job(job_id: str) -> dict | None:
 
 
 def get_forecast(forecast_id: str) -> dict | None:
-    return _forecasts.get(forecast_id)
+    """Prévision complète, depuis la mémoire ou rechargée depuis le disque."""
+    if not storage.valid_id(forecast_id):
+        return None
+    with _lock:
+        cached = _forecasts.get(forecast_id)
+        if cached is not None:
+            _forecasts.move_to_end(forecast_id)
+            return cached
+
+    loaded = storage.load(forecast_id)
+    if loaded is None:
+        return None
+    with _lock:
+        _forecasts[forecast_id] = loaded
+        while len(_forecasts) > _MAX_CACHED:
+            _forecasts.popitem(last=False)
+    return loaded
 
 
 def list_forecasts() -> list[dict]:
-    return [f["meta"] for f in reversed(_forecasts.values())]
+    """Index de l'historique persistant."""
+    return storage.index()
+
+
+def delete_forecast(forecast_id: str) -> bool:
+    if not storage.valid_id(forecast_id):
+        return False
+    with _lock:
+        _forecasts.pop(forecast_id, None)
+    return storage.delete(forecast_id)
+
+
+def delete_all_forecasts() -> int:
+    with _lock:
+        _forecasts.clear()
+    return storage.delete_all()
 
 
 def _update(job: dict, **kwargs) -> None:
@@ -189,6 +223,7 @@ def _run_job(job_id: str) -> None:
         else:
             result = _run_aurora(job, holder)
 
+        storage.save(result)
         with _lock:
             _forecasts[result["meta"]["id"]] = result
             while len(_forecasts) > _MAX_CACHED:
@@ -444,7 +479,7 @@ def _package(
 
 
 def field_payload(forecast_id: str, var: str) -> dict | None:
-    fc = _forecasts.get(forecast_id)
+    fc = get_forecast(forecast_id)
     if fc is None or var not in fc["fields"]:
         return None
     payload = quantize(fc["fields"][var])
@@ -453,7 +488,7 @@ def field_payload(forecast_id: str, var: str) -> dict | None:
 
 
 def wind_payload(forecast_id: str) -> dict | None:
-    fc = _forecasts.get(forecast_id)
+    fc = get_forecast(forecast_id)
     if fc is None or "u10" not in fc["fields"] or "v10" not in fc["fields"]:
         return None
     return {
@@ -464,7 +499,7 @@ def wind_payload(forecast_id: str) -> dict | None:
 
 
 def point_series(forecast_id: str, lat: float, lon: float) -> dict | None:
-    fc = _forecasts.get(forecast_id)
+    fc = get_forecast(forecast_id)
     if fc is None:
         return None
     g = fc["meta"]["grid"]

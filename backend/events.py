@@ -16,9 +16,19 @@ class EventBus:
         self._logs: deque[dict] = deque(maxlen=_MAX_LOGS)
         self._loop: asyncio.AbstractEventLoop | None = None
         self._seq = 0
+        self._closing = False
 
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
+
+    @property
+    def closing(self) -> bool:
+        """Vrai dès que l'arrêt du serveur est demandé : les flux SSE doivent se clore."""
+        return self._closing
+
+    def request_shutdown(self) -> None:
+        # Appelé depuis un gestionnaire de signal : simple affectation, rien d'asynchrone.
+        self._closing = True
 
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=500)

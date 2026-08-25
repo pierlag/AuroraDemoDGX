@@ -50,7 +50,7 @@ async function boot() {
   $('base-time').value = new Date(`${data.default_base_time}Z`).toISOString().slice(0, 16);
   applyDateBounds();
 
-  renderHistory(data.forecasts);
+  renderHistory(data.forecasts, data.storage);
   if (data.forecasts.length) loadForecast(data.forecasts[0].id);
 
   subscribe({
@@ -75,6 +75,7 @@ function bindUi() {
   });
   $('run-btn').addEventListener('click', runForecast);
   $('src').addEventListener('change', updateSourceHint);
+  $('history-clear').addEventListener('click', clearHistory);
 
   $('play').addEventListener('click', togglePlay);
   $('speed').addEventListener('change', (e) => { state.speed = Number(e.target.value); });
@@ -250,7 +251,7 @@ function onJob(job) {
     state.jobId = null;
     $('run-btn').disabled = false;
     loadForecast(job.forecast_id);
-    API.get('/forecasts').then((d) => renderHistory(d.forecasts));
+    refreshHistory();
   } else if (job.status === 'error') {
     $('run-btn').disabled = false;
     state.jobId = null;
@@ -281,7 +282,7 @@ async function loadForecast(id) {
     syncVariableSwitch();
     applyToMap();
     selectCity(state.selection?.name || 'Paris');
-    renderHistory((await API.get('/forecasts')).forecasts);
+    refreshHistory();
   } catch (err) {
     toast(err.message, 'err');
   }
@@ -640,22 +641,104 @@ function renderRanking() {
   });
 }
 
-function renderHistory(forecasts) {
+function renderHistory(forecasts, storage) {
   const box = $('history');
+  const summary = $('history-summary');
+  if (storage) {
+    summary.textContent = storage.count
+      ? `${storage.count} enregistrée(s) · ${fmt.bytes(storage.bytes / 1024 ** 2)} `
+        + `· max ${storage.max_stored}`
+      : 'Stockage vide';
+    $('history-clear').disabled = !storage.count;
+  }
   if (!forecasts.length) {
-    box.innerHTML = '<div class="empty-state" style="padding:12px 0">Aucune prévision enregistrée.</div>';
+    box.innerHTML = '<div class="empty-state" style="padding:12px 0">'
+      + 'Aucune prévision enregistrée.</div>';
     return;
   }
   box.innerHTML = '';
   for (const f of forecasts) {
     const el = document.createElement('div');
     el.className = `history-item${state.forecast?.meta.id === f.id ? ' active' : ''}`;
-    el.innerHTML = `<b>${f.model_name}</b>
+    el.innerHTML = `<button class="history-del" title="Supprimer cette prévision">×</button>
+      <b>${f.model_name}</b>
       <span>${fmt.full(f.base_time)} · ${f.steps}×${f.step_hours} h ·
-      ${f.real_data ? 'ERA5' : 'démo'}</span>`;
+      ${f.real_data ? 'ERA5' : 'démo'}${
+  f.stored_bytes ? ` · ${fmt.bytes(f.stored_bytes / 1024 ** 2)}` : ''
+}</span>`;
     el.addEventListener('click', () => loadForecast(f.id));
+    el.querySelector('.history-del').addEventListener('click', (evt) => {
+      evt.stopPropagation();
+      removeForecast(f);
+    });
     box.appendChild(el);
   }
+}
+
+async function refreshHistory() {
+  try {
+    const data = await API.get('/forecasts');
+    renderHistory(data.forecasts, data.storage);
+    return data;
+  } catch (err) {
+    toast(err.message, 'err');
+    return null;
+  }
+}
+
+async function removeForecast(entry) {
+  const label = `${entry.model_name} — ${fmt.full(entry.base_time)}`;
+  if (!confirm(`Supprimer définitivement cette prévision ?\n\n${label}`)) return;
+  try {
+    await API.del(`/forecasts/${entry.id}`);
+    if (state.forecast?.meta.id === entry.id) clearForecastView();
+    const data = await refreshHistory();
+    if (state.forecast === null && data?.forecasts.length) loadForecast(data.forecasts[0].id);
+    toast('Prévision supprimée', 'ok', 2500);
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+async function clearHistory() {
+  if (!confirm('Supprimer toutes les prévisions enregistrées ?\n'
+    + 'Les fichiers correspondants seront effacés du disque.')) return;
+  try {
+    const result = await API.del('/forecasts');
+    clearForecastView();
+    await refreshHistory();
+    toast(`${result.removed} prévision(s) supprimée(s)`, 'ok');
+  } catch (err) {
+    toast(err.message, 'err');
+  }
+}
+
+/** Remet la scène à l'état vide après suppression de la prévision affichée. */
+function clearForecastView() {
+  stopPlay();
+  state.forecast = null;
+  state.fields.clear();
+  state.wind = null;
+  state.step = 0;
+  state.selection = null;
+  map.selected = null;
+  map.setData({ grid: null, frames: null, palette: 'temperature', domain: [0, 1],
+    windU: null, windV: null, overlay: null });
+  $('stage-empty').hidden = false;
+  $('legend').hidden = true;
+  $('meta-card').hidden = true;
+  $('map-var').textContent = '—';
+  $('map-sub').textContent = 'Aucune prévision chargée';
+  $('tl-time').textContent = '—';
+  $('tl-lead').textContent = '';
+  $('tl-range').disabled = true;
+  $('play').disabled = true;
+  $('badges').innerHTML = '';
+  $('ranking').innerHTML = '';
+  $('city-metrics').innerHTML = '';
+  $('city-temp').textContent = '—';
+  $('city-cond').textContent = '';
+  $('tl-ticks').innerHTML = '';
 }
 
 boot().catch((err) => {

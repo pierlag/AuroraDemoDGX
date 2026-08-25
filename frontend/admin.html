@@ -74,6 +74,19 @@
           🗑 Purger le cache HuggingFace
         </button>
       </section>
+
+      <section class="glass panel">
+        <div class="section-title">Prévisions enregistrées</div>
+        <div class="spec-list" id="storage-box"></div>
+        <div class="stored-list scroll" id="stored-list"></div>
+        <button class="btn btn-danger btn-block btn-sm" id="storage-clear" style="margin-top:10px">
+          🗑 Vider l'historique
+        </button>
+        <p style="font-size:10.8px;color:var(--muted);line-height:1.5;margin:9px 0 0">
+          L'historique survit au redémarrage du serveur. Les plus anciennes entrées
+          sont supprimées automatiquement au-delà de la limite.
+        </p>
+      </section>
     </div>
 
     <!-- ============ Colonne 2 : modèles ============ -->

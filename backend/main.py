@@ -6,6 +6,8 @@ import asyncio
 import ipaddress
 import json
 import secrets
+import signal
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -13,12 +15,14 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import forecast as fc
 from .config import ADMIN_TOKEN, FRONTEND_DIR, HOST, MAX_STEPS, PORT
 from .data_sources import list_sources
 from .events import bus
-from .geo import CITIES, shapes_geojson
+from .geo import CITIES, cities_outside_france, shapes_geojson
 from .github_client import session as github
 from .model_manager import manager
 from .registry import MODELS, VARIABLES
@@ -28,6 +32,7 @@ from .system_info import (
     local_addresses,
     system_snapshot,
 )
+from . import storage
 from .tunnel import tunnel
 
 
@@ -67,10 +72,42 @@ def require_admin(request: Request) -> None:
 
 ADMIN = [Depends(require_admin)]
 
+# Cadence du flux SSE : réveil court (réactivité à l'arrêt), ping espacé (trafic).
+_SSE_POLL = 1.0
+_SSE_PING = 20.0
+
+
+def _announce_shutdown_to_streams() -> None:
+    """Prévient les flux SSE dès le premier Ctrl+C.
+
+    Uvicorn attend la fermeture des connexions actives *avant* d'exécuter l'arrêt
+    du `lifespan`. Un flux SSE ne se terminant jamais de lui-même, le serveur
+    resterait bloqué jusqu'à un second Ctrl+C, qui annule brutalement les tâches
+    ASGI (d'où la pile `CancelledError`). On se greffe donc sur le gestionnaire de
+    signal installé par uvicorn pour libérer les flux avant qu'il n'attende.
+    """
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            previous = signal.getsignal(sig)
+        except ValueError:  # hors du thread principal
+            return
+        if not callable(previous):  # SIG_DFL / SIG_IGN : on ne touche à rien
+            continue
+
+        def handler(signum: int, frame, _previous=previous) -> None:
+            bus.request_shutdown()
+            _previous(signum, frame)
+
+        try:
+            signal.signal(sig, handler)
+        except ValueError:
+            return
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     bus.bind_loop(asyncio.get_running_loop())
+    _announce_shutdown_to_streams()
     bus.log("Station Aurora France démarrée", level="success")
     snap = system_snapshot()
     bus.log(
@@ -85,6 +122,17 @@ async def lifespan(_app: FastAPI):
             "Administration à distance "
             + ("protégée par jeton" if ADMIN_TOKEN else "désactivée (aucun jeton configuré)"),
             level="info" if ADMIN_TOKEN else "warn",
+        )
+    stored = storage.stats()
+    bus.log(
+        f"Historique : {stored['count']} prévision(s) sur disque "
+        f"({stored['bytes'] / 1024**2:.1f} Mo)",
+    )
+    strays = cities_outside_france()
+    if strays:
+        bus.log(
+            f"{len(strays)} ville(s) hors du contour national : {', '.join(strays)}",
+            level="warn",
         )
     yield
 
@@ -135,6 +183,7 @@ def bootstrap(request: Request) -> dict:
         "model_state": manager.snapshot(),
         "system": system_snapshot(),
         "forecasts": fc.list_forecasts(),
+        "storage": storage.stats(),
         "default_base_time": fc.default_base_time().isoformat(),
         "max_steps": MAX_STEPS,
         "tunnel": tunnel.snapshot(),
@@ -269,7 +318,18 @@ def job_status(job_id: str) -> dict:
 
 @api.get("/forecasts")
 def forecasts() -> dict:
-    return {"forecasts": fc.list_forecasts()}
+    return {"forecasts": fc.list_forecasts(), "storage": storage.stats()}
+
+
+@api.get("/forecasts/storage")
+def forecasts_storage() -> dict:
+    return storage.stats()
+
+
+@api.delete("/forecasts", dependencies=ADMIN)
+def delete_forecasts() -> dict:
+    removed = fc.delete_all_forecasts()
+    return {"removed": removed, "storage": storage.stats()}
 
 
 @api.get("/forecasts/{forecast_id}")
@@ -278,6 +338,13 @@ def forecast_detail(forecast_id: str) -> dict:
     if result is None:
         raise HTTPException(status_code=404, detail="Prévision inconnue ou expirée")
     return {"meta": result["meta"], "cities": result["cities"]}
+
+
+@api.delete("/forecasts/{forecast_id}", dependencies=ADMIN)
+def delete_forecast(forecast_id: str) -> dict:
+    if not fc.delete_forecast(forecast_id):
+        raise HTTPException(status_code=404, detail="Prévision inconnue")
+    return {"deleted": forecast_id, "storage": storage.stats()}
 
 
 @api.get("/forecasts/{forecast_id}/field/{var}")
@@ -416,12 +483,19 @@ async def events() -> StreamingResponse:
         try:
             hello = {"type": "hello", "data": manager.snapshot()}
             yield f"data: {json.dumps(hello)}\n\n"
-            while True:
+            last_ping = time.monotonic()
+            # Réveil fréquent : le flux doit pouvoir se clore rapidement quand le
+            # serveur s'arrête, sans attendre l'intervalle complet du ping.
+            while not bus.closing:
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=20.0)
-                    yield f"data: {json.dumps(event, default=str)}\n\n"
+                    event = await asyncio.wait_for(queue.get(), timeout=_SSE_POLL)
                 except asyncio.TimeoutError:
-                    yield ": ping\n\n"
+                    if time.monotonic() - last_ping >= _SSE_PING:
+                        last_ping = time.monotonic()
+                        yield ": ping\n\n"
+                    continue
+                yield f"data: {json.dumps(event, default=str)}\n\n"
+                last_ping = time.monotonic()
         finally:
             bus.unsubscribe(queue)
 
@@ -440,13 +514,32 @@ app.include_router(api)
 # ---------------------------------------------------------------------------
 
 
-@app.middleware("http")
-async def _no_cache_assets(request, call_next):
-    """Les fichiers du front sont servis sans cache : outil local, itératif."""
-    response = await call_next(request)
-    if not request.url.path.startswith("/api"):
-        response.headers["Cache-Control"] = "no-store, must-revalidate"
-    return response
+class NoCacheAssets:
+    """Sert les fichiers du front sans cache : outil local, itératif.
+
+    Middleware ASGI pur plutôt que `@app.middleware("http")` : ce dernier repose
+    sur `BaseHTTPMiddleware`, qui recopie chaque réponse dans un flux mémoire —
+    inadapté au SSE (latence, mémoire) et source de piles `CancelledError` à
+    l'arrêt du serveur.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["path"].startswith("/api"):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_no_cache(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)["Cache-Control"] = "no-store, must-revalidate"
+            await send(message)
+
+        await self.app(scope, receive, send_no_cache)
+
+
+app.add_middleware(NoCacheAssets)
 
 
 @app.get("/")

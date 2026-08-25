@@ -227,6 +227,39 @@ body.admin { overflow-y: auto; }
   margin-bottom: 5px;
 }
 
+.stored-list { max-height: 220px; overflow-y: auto; margin-top: 10px; }
+
+.stored-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 11.2px;
+  margin-bottom: 5px;
+}
+.stored-item .info { flex: 1; min-width: 0; }
+.stored-item b { display: block; font-size: 11.5px; }
+.stored-item span { color: var(--muted); font-size: 10.5px; }
+.stored-item .size { color: var(--text-dim); font-family: var(--mono); white-space: nowrap; }
+.stored-item button {
+  flex: 0 0 auto;
+  width: 22px; height: 22px;
+  border-radius: 7px;
+  border: 1px solid var(--stroke);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.14s;
+}
+.stored-item button:hover {
+  background: rgba(255, 107, 122, 0.18);
+  color: var(--err);
+  border-color: rgba(255, 107, 122, 0.4);
+}
+
 /* --- partage public ------------------------------------------------------- */
 
 .share-step {

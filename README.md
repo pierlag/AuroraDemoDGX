@@ -34,6 +34,7 @@ Variables d'environnement utiles :
 | `AURORA_ADMIN_TOKEN` | *(vide)* | Jeton requis pour administrer depuis le réseau |
 | `GITHUB_CLIENT_ID` | *(via `.env`)* | Identifiant OAuth pour la publication de démo |
 | `AURORA_DEMO_ISSUE_TITLE` | `Public demo` | Titre de l'issue de démonstration |
+| `AURORA_MAX_STORED_FORECASTS` | `40` | Nombre de prévisions conservées sur disque |
 | `AURORA_DATA_DIR` | `./data` | Cache des poids et des données |
 | `HF_HOME` | `./data/cache/huggingface` | Cache HuggingFace |
 
@@ -93,6 +94,11 @@ journaliers, navigation au clavier (<kbd>espace</kbd>, <kbd>←</kbd>,
 45 villes de référence, météogramme (courbe de température, enveloppe
 d'incertitude d'ensemble, barres de précipitations, vent), classement dynamique.
 Un clic n'importe où sur la carte extrait la série du point.
+</td></tr>
+<tr><td><b>Historique</b></td><td>
+Chaque prévision est écrite sur disque et rechargeable après redémarrage du
+serveur. Suppression à l'unité ou vidage complet, depuis la carte comme depuis
+la console d'administration.
 </td></tr>
 </table>
 
@@ -248,11 +254,14 @@ backend/
   main.py           API HTTP, SSE, service des fichiers statiques
   model_manager.py  machine à états du modèle, pré-vol, cache, installation
   forecast.py       file de travaux, rollout, extraction France, quantification
+  storage.py        persistance des prévisions (index, chargement, suppression)
   simulation.py     moteur atmosphérique local
   data_sources.py   ERA5/CDS, disponibilité des sources
+  tunnel.py         tunnels publics (Cloudflare, Dev Tunnels)
+  github_client.py  device flow GitHub, publication de l'issue de démo
   registry.py       catalogue des modèles et des variables
   geo.py            contours, villes, masques terre/mer, relief
-  system_info.py    sonde CPU/RAM/GPU/dépendances
+  system_info.py    sonde CPU/RAM/GPU/dépendances/réseau
   events.py         bus d'événements temps réel
 frontend/
   index.html        vue prévision
@@ -267,6 +276,14 @@ frontend/
 Les champs sont transmis quantifiés sur 16 bits en base64 (~47 ko par échéance
 et par variable), décodés en `Float32Array` côté navigateur : l'animation reste
 fluide sans WebGL ni bibliothèque tierce.
+
+Sur disque, chaque prévision occupe `data/forecasts/{id}/` avec ses métadonnées
+en JSON et ses champs en NPZ compressé (5 à 15 Mo selon l'échéance). L'écriture
+est atomique — dossier temporaire puis renommage — pour qu'une interruption ne
+laisse jamais d'entrée corrompue. Seuls les champs des quatre dernières
+prévisions consultées restent en mémoire ; les autres sont relus à la demande.
+La limite d'entrées conservées se règle avec `AURORA_MAX_STORED_FORECASTS`
+(40 par défaut).
 
 ---
 
