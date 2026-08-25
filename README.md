@@ -1,4 +1,4 @@
-# Aurora France — station de prévision
+# Aurora Demo — station de prévision
 
 Interface web de prévision météorologique sur la France, bâtie autour du modèle
 de fondation [Aurora](https://github.com/microsoft/aurora) de Microsoft.
