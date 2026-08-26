@@ -168,6 +168,7 @@ def delete_all() -> int:
 
 def stats() -> dict:
     entries = index()
+    measured = [m["energy"] for m in entries if (m.get("energy") or {}).get("measured")]
     return {
         "count": len(entries),
         "bytes": sum(m.get("stored_bytes", 0) for m in entries),
@@ -175,5 +176,9 @@ def stats() -> dict:
         "path": str(FORECAST_DIR),
         "oldest": entries[-1]["created"] if entries else None,
         "newest": entries[0]["created"] if entries else None,
+        "energy_wh": round(sum(e["total_wh"] for e in measured), 8),
+        "co2_g": round(sum(e["co2_g"] for e in measured), 10),
+        "compute_s": round(sum(e["duration_s"] for e in measured), 1),
+        "measured_count": len(measured),
         "updated": time.time(),
     }

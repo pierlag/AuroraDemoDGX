@@ -532,9 +532,31 @@ function renderMeta(meta) {
     ['Membres', String(meta.members)],
     ['Grille', `${meta.grid.nx} × ${meta.grid.ny}`],
   ];
+  const energy = meta.energy;
+  if (energy?.measured) {
+    rows.push(
+      ['Durée de calcul', fmt.duration(energy.duration_s)],
+      ['Énergie', fmt.energy(energy.total_wh)],
+      ['Puissance moyenne', `${energy.gpu_avg_w} W`],
+      ['Empreinte', fmt.co2(energy.co2_g)],
+    );
+  }
   $('run-summary').innerHTML = rows
     .map(([k, v]) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`)
     .join('');
+  const note = $('energy-note');
+  if (energy?.measured) {
+    note.hidden = false;
+    const scope = energy.host_power_w > 0
+      ? `GPU mesuré + hôte forfaitaire ${energy.host_power_w} W`
+      : 'GPU mesuré seul (hors processeur, mémoire et alimentation)';
+    const caveat = energy.on_gpu
+      ? ''
+      : ' — calcul effectué sur processeur, le GPU était au repos.';
+    note.textContent = `${scope} · ${energy.carbon_intensity_g_kwh} gCO₂e/kWh${caveat}`;
+  } else {
+    note.hidden = true;
+  }
 }
 
 function renderBadges(meta) {
@@ -641,13 +663,36 @@ function renderRanking() {
   });
 }
 
+/** Ligne énergie/CO₂ d'une prévision, avec le détail de la méthode en infobulle. */
+function energyBadge(energy) {
+  if (!energy || !energy.measured) return '';
+  const lines = [
+    energy.on_gpu
+      ? `Consommation du GPU mesurée pendant le calcul (${energy.gpu_avg_w} W moyens)`
+      : `Calcul sur processeur : le GPU était au repos (${energy.gpu_avg_w} W).`
+        + ' Cette valeur ne reflète donc pas le coût réel du calcul.',
+    `Durée : ${fmt.duration(energy.duration_s)}`,
+    energy.host_power_w > 0
+      ? `Hôte ajouté au forfait de ${energy.host_power_w} W`
+      : 'Hors processeur, mémoire et pertes d’alimentation',
+    `Intensité carbone : ${energy.carbon_intensity_g_kwh} gCO₂e/kWh`,
+    `Source : ${energy.method}`,
+  ];
+  const cls = energy.on_gpu ? 'energy-line' : 'energy-line idle';
+  return `<span class="${cls}" title="${lines.join('\n').replace(/"/g, '&quot;')}">
+    ⚡ ${fmt.energy(energy.total_wh)} · 🌿 ${fmt.co2(energy.co2_g)}`
+    + `${energy.on_gpu ? '' : ' <i>(GPU au repos)</i>'}</span>`;
+}
+
 function renderHistory(forecasts, storage) {
   const box = $('history');
   const summary = $('history-summary');
   if (storage) {
     summary.textContent = storage.count
-      ? `${storage.count} enregistrée(s) · ${fmt.bytes(storage.bytes / 1024 ** 2)} `
-        + `· max ${storage.max_stored}`
+      ? `${storage.count} enregistrée(s) · ${fmt.bytes(storage.bytes / 1024 ** 2)}`
+        + (storage.measured_count
+          ? ` · ⚡ ${fmt.energy(storage.energy_wh)} · ${fmt.co2(storage.co2_g)}`
+          : '')
       : 'Stockage vide';
     $('history-clear').disabled = !storage.count;
   }
@@ -665,7 +710,8 @@ function renderHistory(forecasts, storage) {
       <span>${fmt.full(f.base_time)} · ${f.steps}×${f.step_hours} h ·
       ${f.real_data ? 'ERA5' : 'démo'}${
   f.stored_bytes ? ` · ${fmt.bytes(f.stored_bytes / 1024 ** 2)}` : ''
-}</span>`;
+}</span>
+      ${energyBadge(f.energy)}`;
     el.addEventListener('click', () => loadForecast(f.id));
     el.querySelector('.history-del').addEventListener('click', (evt) => {
       evt.stopPropagation();

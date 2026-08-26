@@ -37,6 +37,16 @@ GITHUB_TOKEN_FILE = STATE_DIR / "github_token.json"
 # Titre de l'issue de publication de la démonstration.
 DEMO_ISSUE_TITLE = os.environ.get("AURORA_DEMO_ISSUE_TITLE", "Public demo").strip()
 
+# Intensité carbone du réseau électrique, en gCO₂eq par kWh consommé.
+# 56 g/kWh correspond à la moyenne française (base carbone ADEME, électricité
+# consommée). Moyenne européenne : ~250 ; Allemagne : ~350 ; Pologne : ~650.
+CARBON_INTENSITY_G_KWH = float(os.environ.get("AURORA_CARBON_INTENSITY", "56"))
+
+# Consommation forfaitaire du reste de la machine (processeur, mémoire, carte
+# mère, pertes d'alimentation). Aucun capteur ne l'expose ici : laisser à 0
+# n'inclut que le GPU, réellement mesuré.
+HOST_POWER_W = float(os.environ.get("AURORA_HOST_POWER_W", "0"))
+
 # Emprise géographique de la France métropolitaine (+ Corse et marge maritime).
 LAT_MAX = 51.6
 LAT_MIN = 41.0

@@ -454,6 +454,26 @@
 .history-item:hover .history-del { opacity: 1; }
 .history-del:hover { background: rgba(255, 107, 122, 0.2); color: var(--err); }
 
+.energy-line {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: var(--ok);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+.energy-line.idle { color: var(--muted); }
+.energy-line i { font-style: normal; opacity: 0.75; }
+
+.energy-note {
+  margin: 10px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--stroke);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 .empty-state {
   text-align: center;
   padding: 26px 14px;

@@ -35,6 +35,8 @@ Variables d'environnement utiles :
 | `GITHUB_CLIENT_ID` | *(via `.env`)* | Identifiant OAuth pour la publication de démo |
 | `AURORA_DEMO_ISSUE_TITLE` | `Public demo` | Titre de l'issue de démonstration |
 | `AURORA_MAX_STORED_FORECASTS` | `40` | Nombre de prévisions conservées sur disque |
+| `AURORA_CARBON_INTENSITY` | `56` | Intensité carbone du réseau, gCO₂e/kWh |
+| `AURORA_HOST_POWER_W` | `0` | Consommation forfaitaire hors GPU, en watts |
 | `AURORA_DATA_DIR` | `./data` | Cache des poids et des données |
 | `HF_HOME` | `./data/cache/huggingface` | Cache HuggingFace |
 
@@ -100,7 +102,32 @@ Chaque prévision est écrite sur disque et rechargeable après redémarrage du
 serveur. Suppression à l'unité ou vidage complet, depuis la carte comme depuis
 la console d'administration.
 </td></tr>
+<tr><td><b>Empreinte</b></td><td>
+Chaque exécution est accompagnée de sa consommation électrique et de son
+empreinte carbone, cumulées sur l'ensemble de l'historique.
+</td></tr>
 </table>
+
+### Mesure de la consommation
+
+L'énergie est relevée sur le **GPU**, par ordre de préférence :
+
+1. compteur d'énergie cumulatif NVML (`nvmlDeviceGetTotalEnergyConsumption`) —
+   intégré par le matériel, sans erreur d'échantillonnage ;
+2. échantillonnage NVML de la puissance instantanée, intégré par la méthode des
+   trapèzes ;
+3. échantillonnage via `nvidia-smi`.
+
+L'empreinte vaut `énergie × intensité carbone`. La valeur par défaut de
+56 gCO₂e/kWh correspond à la moyenne française (base carbone ADEME, électricité
+consommée) — à comparer à ~250 pour la moyenne européenne ou ~350 en Allemagne.
+
+> **Portée de la mesure.** Seul le GPU est instrumenté : ni le processeur, ni la
+> mémoire, ni les pertes de l'alimentation n'y figurent, faute de capteur exposé
+> par la machine. Une exécution sur processeur — le simulateur local, par exemple —
+> ne mesure donc que le GPU **au repos** ; l'interface le signale explicitement.
+> Renseignez `AURORA_HOST_POWER_W` avec une mesure à la prise pour approcher le
+> total.
 
 ---
 
@@ -255,6 +282,7 @@ backend/
   model_manager.py  machine à états du modèle, pré-vol, cache, installation
   forecast.py       file de travaux, rollout, extraction France, quantification
   storage.py        persistance des prévisions (index, chargement, suppression)
+  energy.py         mesure d'énergie GPU et empreinte carbone
   simulation.py     moteur atmosphérique local
   data_sources.py   ERA5/CDS, disponibilité des sources
   tunnel.py         tunnels publics (Cloudflare, Dev Tunnels)

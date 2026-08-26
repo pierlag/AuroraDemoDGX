@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 from .config import BASE_TIMESTEP_H, LAT_MAX, LAT_MIN, LON_MAX, LON_MIN, MAX_STEPS
+from .energy import EnergyMeter, log_result
 from .events import bus
 from .geo import CITIES, france_mask, render_grid
 from .model_manager import manager
@@ -218,10 +219,16 @@ def _run_job(job_id: str) -> None:
         holder = manager.acquire()
         _update(job, status="running", progress=0.02, message="Préparation")
 
-        if holder["engine"] == "simulation":
-            result = _run_simulation(job)
-        else:
-            result = _run_aurora(job, holder)
+        meter = EnergyMeter(manager.device)
+        with meter:
+            if holder["engine"] == "simulation":
+                result = _run_simulation(job)
+            else:
+                result = _run_aurora(job, holder)
+
+        energy = meter.result()
+        result["meta"]["energy"] = energy
+        log_result(energy)
 
         storage.save(result)
         with _lock:

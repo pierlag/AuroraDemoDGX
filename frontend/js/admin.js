@@ -236,6 +236,9 @@ async function refreshStorage() {
     $('storage-box').innerHTML = [
       ['Entrées', `${storage.count} / ${storage.max_stored}`],
       ['Espace occupé', fmt.bytes(storage.bytes / 1024 ** 2)],
+      ['Temps de calcul cumulé', fmt.duration(storage.compute_s)],
+      ['Énergie cumulée', fmt.energy(storage.energy_wh)],
+      ['Empreinte cumulée', fmt.co2(storage.co2_g)],
       ['Emplacement', storage.path],
     ].map(([k, v]) => `<div class="spec"><span>${k}</span><b>${escapeHtml(String(v))}</b></div>`)
       .join('');
@@ -249,10 +252,14 @@ async function refreshStorage() {
       for (const f of forecasts) {
         const row = document.createElement('div');
         row.className = 'stored-item';
+        const energy = f.energy?.measured
+          ? `<span style="color:var(--ok)"> · ⚡ ${fmt.energy(f.energy.total_wh)}
+             · ${fmt.co2(f.energy.co2_g)}</span>`
+          : '';
         row.innerHTML = `<div class="info">
             <b>${escapeHtml(f.model_name || f.model_id)}</b>
             <span>${fmt.full(f.base_time)} · ${f.steps}×${f.step_hours} h ·
-              ${f.real_data ? 'ERA5' : 'démo'}</span>
+              ${f.real_data ? 'ERA5' : 'démo'}${energy}</span>
           </div>
           <span class="size">${fmt.bytes((f.stored_bytes || 0) / 1024 ** 2)}</span>
           <button title="Supprimer">×</button>`;

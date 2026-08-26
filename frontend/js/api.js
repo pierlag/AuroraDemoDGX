@@ -141,8 +141,30 @@ export const fmt = {
       ? '—'
       : value.toFixed(decimals),
   bytes: (mb) => (mb >= 1024 ? `${(mb / 1024).toFixed(1)} Go` : `${Math.round(mb)} Mo`),
+  /** Énergie, avec descente jusqu'au µWh : une inférence courte consomme peu. */
+  energy: (wh) => {
+    if (wh === null || wh === undefined) return '—';
+    const mwh = wh * 1000;
+    if (wh >= 1000) return `${(wh / 1000).toFixed(2)} kWh`;
+    if (wh >= 1) return `${wh.toFixed(2)} Wh`;
+    if (mwh >= 10) return `${mwh.toFixed(0)} mWh`;
+    if (mwh >= 0.1) return `${mwh.toFixed(2)} mWh`;
+    return `${Math.round(wh * 1e6)} µWh`;
+  },
+  /** Empreinte carbone, jusqu'au µgCO₂e (réseau français très peu carboné). */
+  co2: (grams) => {
+    if (grams === null || grams === undefined) return '—';
+    const mg = grams * 1000;
+    if (grams >= 1000) return `${(grams / 1000).toFixed(2)} kgCO₂e`;
+    if (grams >= 1) return `${grams.toFixed(2)} gCO₂e`;
+    if (mg >= 10) return `${mg.toFixed(0)} mgCO₂e`;
+    if (mg >= 0.1) return `${mg.toFixed(2)} mgCO₂e`;
+    return `${Math.round(grams * 1e6)} µgCO₂e`;
+  },
   duration: (s) => {
     if (s == null) return '—';
+    if (s < 1) return `${Math.round(s * 1000)} ms`;
+    if (s < 10) return `${s.toFixed(1)} s`;
     if (s < 60) return `${Math.round(s)} s`;
     if (s < 3600) return `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`;
     return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
