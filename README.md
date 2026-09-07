@@ -6,6 +6,8 @@ L'application tourne intégralement en local : un serveur FastAPI pilote le
 modèle (chargement, déchargement, inférence) et sert une interface cartographique
 animée sans aucune dépendance externe côté navigateur.
 
+![Interface de prévision Aurora Demo DGX](https://github.com/user-attachments/assets/2b6b3436-7ca8-4b9c-986e-da49599820bd)
+
 ```
 http://127.0.0.1:8077/        carte et prévisions
 http://127.0.0.1:8077/admin   console d'administration
