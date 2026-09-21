@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurora Demo DGX — Vérification des prévisions</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+<link rel="stylesheet" href="/css/theme.css">
+<link rel="stylesheet" href="/css/admin.css">
+<link rel="stylesheet" href="/css/verify.css">
+</head>
+<body class="admin scrollable">
+<div class="aurora-bg"></div>
+<div class="aurora-veil"></div>
+
+<div class="admin-shell">
+  <header class="admin-top">
+    <div class="brand">
+      <div class="brand-mark">🎯</div>
+      <div>
+        <h1>Vérification des prévisions</h1>
+        <div class="sub">Comparaison à l'analyse ERA5 et notation sur 100</div>
+      </div>
+    </div>
+    <div class="admin-actions">
+      <span class="pill muted" id="coverage-pill"><i class="dot"></i>Couverture…</span>
+      <span class="pill muted" id="run-pill"><i class="dot"></i>—</span>
+      <a class="link-admin" href="/">↩ Carte</a>
+      <a class="link-admin" href="/admin">⚙ Administration</a>
+    </div>
+  </header>
+
+  <!-- ============ Bilan tous réseaux confondus ============ -->
+  <section class="glass panel verdict">
+    <div class="verdict-main">
+      <div class="score-ring" id="global-ring">
+        <b id="global-score">—</b>
+        <span>/ 100</span>
+      </div>
+      <div class="verdict-text">
+        <h2 id="global-grade">Aucune vérification</h2>
+        <p id="global-note">
+          Lancez la vérification pour confronter chaque prévision enregistrée à la
+          réanalyse ERA5 aux mêmes dates de validité.
+        </p>
+        <div class="run-row">
+          <button class="btn btn-primary btn-sm" id="run-btn">▶ Vérifier l'historique</button>
+          <button class="btn btn-sm" id="force-btn" title="Recalculer même les rapports complets">
+            ↻ Tout recalculer
+          </button>
+          <label class="toggle">
+            <input type="checkbox" id="allow-download" checked>
+            Télécharger les journées ERA5 manquantes
+          </label>
+        </div>
+        <div class="progress" id="run-progress" hidden><i id="run-bar"></i></div>
+        <p class="hint" id="run-message"></p>
+      </div>
+    </div>
+
+    <div class="verdict-side">
+      <div class="section-title">Note moyenne par journée d'échéance</div>
+      <div class="day-bars" id="global-days"></div>
+      <div class="section-title" style="margin-top:14px">Erreur moyenne par variable</div>
+      <div class="var-table" id="global-vars"></div>
+    </div>
+  </section>
+
+  <div class="verify-grid">
+    <!-- ============ Colonne 1 : réseaux ============ -->
+    <section class="glass panel">
+      <div class="section-title">Prévisions notées</div>
+      <div class="run-list" id="run-list"></div>
+    </section>
+
+    <!-- ============ Colonne 2 : détail du réseau ============ -->
+    <div class="stack">
+      <section class="glass panel" id="detail-panel">
+        <div class="detail-head">
+          <div>
+            <div class="section-title" style="margin:0">Réseau sélectionné</div>
+            <h3 id="detail-title">—</h3>
+            <div class="sub mono" id="detail-sub"></div>
+          </div>
+          <div class="detail-score" id="detail-score">—</div>
+        </div>
+
+        <div class="day-chips" id="detail-days"></div>
+
+        <div class="chart-block">
+          <div class="chart-head">
+            <b>Note par échéance</b>
+            <span>100 = prévision parfaite · 50 = erreur de référence</span>
+          </div>
+          <canvas id="profile-chart" class="chart"></canvas>
+        </div>
+
+        <div class="section-title" style="margin-top:14px">Détail par variable</div>
+        <div class="var-table wide" id="detail-vars"></div>
+      </section>
+
+      <section class="glass panel">
+        <div class="chart-head">
+          <b>Prévu contre observé</b>
+          <span class="legend-inline">
+            <i class="swatch pred"></i>prévision
+            <i class="swatch obs"></i>analyse ERA5
+          </span>
+        </div>
+        <div class="compare-controls">
+          <select id="compare-city"></select>
+          <select id="compare-var"></select>
+        </div>
+        <canvas id="compare-chart" class="chart tall"></canvas>
+        <p class="hint" id="compare-note"></p>
+      </section>
+    </div>
+
+    <!-- ============ Colonne 3 : villes ============ -->
+    <section class="glass panel">
+      <div class="section-title">Notes par ville</div>
+      <div class="city-list" id="city-list"></div>
+      <p class="hint" style="margin-top:12px">
+        La vérité de référence est l'analyse ERA5 au point de grille le plus proche
+        de chaque ville. Le relief marqué et les littoraux expliquent une part des
+        écarts : la maille reste de 0,25° (environ 28 km).
+      </p>
+    </section>
+  </div>
+</div>
+
+<script type="module" src="/js/verify.js"></script>
+</body>
+</html>

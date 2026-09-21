@@ -178,7 +178,7 @@ button, select, input {
 .btn-sm { padding: 6px 11px; font-size: 12px; border-radius: 9px; }
 .btn-block { width: 100%; }
 
-select, input[type="text"], input[type="datetime-local"], input[type="number"] {
+select, input[type="text"], input[type="datetime-local"], input[type="time"], input[type="number"] {
   width: 100%;
   padding: 9px 11px;
   border-radius: var(--radius-sm);

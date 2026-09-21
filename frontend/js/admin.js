@@ -35,6 +35,8 @@ const state = {
   github: null,
   repos: [],
   pollTimer: null,
+  schedule: null,
+  scheduleDirty: false,
 };
 
 /* ========================================================================== */
@@ -52,6 +54,8 @@ async function boot() {
   applyModelState(data.model_state);
   applyTunnel(data.tunnel);
   applyGithub(data.github);
+  buildScheduleOptions();
+  applySchedule(data.schedule);
   refreshCache();
   refreshStorage();
 
@@ -63,6 +67,7 @@ async function boot() {
     onClose: () => setPill('sse-pill', 'err', 'Flux interrompu'),
     model_state: applyModelState,
     tunnel_state: applyTunnel,
+    schedule: applySchedule,
     log: (d) => appendLog(d),
     dependencies: () => refreshSystem(),
     job: (d) => {
@@ -71,6 +76,7 @@ async function boot() {
   });
 
   setInterval(refreshSystem, 5000);
+  setInterval(renderScheduleStatus, 30000);
 }
 
 function bindUi() {
@@ -92,6 +98,21 @@ function bindUi() {
   $('repo-private-only').addEventListener('change', () => loadRepos(true));
   $('repo-select').addEventListener('change', updatePublishState);
   $('publish-btn').addEventListener('click', publishDemo);
+
+  $('sched-steps').addEventListener('input', (e) => {
+    $('sched-steps-label').textContent = `${e.target.value * 6} h`;
+  });
+  $('sched-members').addEventListener('input', (e) => {
+    $('sched-members-label').textContent = e.target.value;
+  });
+  for (const id of ['sched-enabled', 'sched-time', 'sched-source', 'sched-steps',
+    'sched-members', 'sched-model', 'sched-device']) {
+    // Marque le formulaire comme en cours d'édition : un événement serveur ne doit
+    // pas écraser une saisie non enregistrée.
+    $(id).addEventListener('input', () => { state.scheduleDirty = true; });
+  }
+  $('sched-save').addEventListener('click', saveSchedule);
+  $('sched-run').addEventListener('click', runScheduleNow);
 }
 
 function setPill(id, cls, text, pulse = false) {
@@ -458,6 +479,115 @@ function applyModelState(s) {
       btn.textContent = 'Charger';
       btn.disabled = busy || s.state === 'busy';
     }
+  }
+}
+
+/* ========================================================================== */
+/* Prévision quotidienne                                                      */
+/* ========================================================================== */
+
+function buildScheduleOptions() {
+  $('sched-source').innerHTML = state.sources
+    .map((s) => `<option value="${s.id}" ${s.available ? '' : 'disabled'}>`
+      + `${s.name}${s.available ? '' : ' (indisponible)'}</option>`)
+    .join('');
+
+  $('sched-model').innerHTML = '<option value="">Aucun — exiger un modèle déjà chargé</option>'
+    + state.models.map((m) => `<option value="${m.id}">${m.name}</option>`).join('');
+
+  $('sched-device').innerHTML = state.devices
+    .map((d) => `<option value="${d.id}">${d.label}</option>`).join('');
+}
+
+function applySchedule(s) {
+  if (!s) return;
+  state.schedule = s;
+
+  if (!state.scheduleDirty) {
+    $('sched-enabled').checked = Boolean(s.enabled);
+    $('sched-time').value = s.time;
+    $('sched-source').value = s.source;
+    $('sched-steps').value = String(s.steps);
+    $('sched-steps-label').textContent = `${s.steps * s.step_hours} h`;
+    $('sched-members').value = String(s.members);
+    $('sched-members-label').textContent = String(s.members);
+    $('sched-model').value = s.model_id || '';
+    $('sched-device').value = s.device;
+    $('sched-steps').max = String(s.max_steps);
+    $('sched-members').max = String(s.max_members);
+  }
+
+  $('sched-run').disabled = Boolean(s.running);
+  renderScheduleStatus();
+}
+
+function renderScheduleStatus() {
+  const s = state.schedule;
+  if (!s) return;
+
+  if (s.running) {
+    setPill('sched-pill', 'info', s.stage || 'Exécution en cours', true);
+  } else if (!s.enabled) {
+    setPill('sched-pill', 'muted', 'Automatisation désactivée');
+  } else if (s.next_run) {
+    setPill('sched-pill', 'ok', `Prochaine ${fmt.full(s.next_run)}`);
+  } else {
+    setPill('sched-pill', 'muted', '—');
+  }
+
+  const outcome = {
+    done: ['Terminée', 'var(--ok)'],
+    error: ['En échec', 'var(--err)'],
+    running: ['En cours', 'var(--accent)'],
+  }[s.last_status] || ['Jamais exécutée', 'var(--muted)'];
+
+  const rows = [
+    ['Réseau retenu', `${fmt.full(s.base_time_preview)} (le plus récent disponible)`],
+    ['Paramètres', `${s.steps} × ${s.step_hours} h · ${s.members} membre(s)`],
+    ['Dernière exécution', s.last_run
+      ? `${fmt.full(new Date(s.last_run * 1000).toISOString())}`
+      : '—'],
+    ['Résultat', `<span style="color:${outcome[1]}">${outcome[0]}</span>`],
+  ];
+  if (s.last_forecast_id && s.last_status === 'done') {
+    rows.push(['Prévision produite', `<span class="mono">${s.last_forecast_id}</span>`]);
+  }
+  if (s.last_error) rows.push(['Motif', s.last_error]);
+
+  $('sched-status').innerHTML = rows
+    .map(([k, v]) => `<div class="spec"><span>${k}</span><b>${v}</b></div>`).join('');
+}
+
+async function saveSchedule() {
+  try {
+    const saved = await withAdmin(() => API.post('/schedule', {
+      enabled: $('sched-enabled').checked,
+      time: $('sched-time').value,
+      source: $('sched-source').value,
+      steps: Number($('sched-steps').value),
+      members: Number($('sched-members').value),
+      model_id: $('sched-model').value || null,
+      device: $('sched-device').value,
+    }));
+    if (!saved) return;
+    state.scheduleDirty = false;
+    applySchedule(saved);
+    toast(saved.enabled
+      ? `Prévision quotidienne programmée à ${saved.time}`
+      : 'Automatisation désactivée', 'ok');
+  } catch (err) {
+    toast(err.message, 'err', 9000);
+  }
+}
+
+async function runScheduleNow() {
+  try {
+    const started = await withAdmin(() => API.post('/schedule/run'));
+    if (!started) return;
+    applySchedule(started);
+    toast('Prévision lancée avec les paramètres enregistrés', 'ok');
+  } catch (err) {
+    toast(err.message, 'err', 9000);
   }
 }
 

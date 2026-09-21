@@ -81,8 +81,29 @@ body.admin { overflow-y: auto; }
 .dep.ok b { color: var(--ok); }
 .dep.ko b { color: var(--err); }
 
-/* --- catalogue de modèles ------------------------------------------------- */
+/* --- prévision quotidienne ------------------------------------------------ */
 
+.sched-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 13px;
+  flex-wrap: wrap;
+}
+.sched-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 550;
+  cursor: pointer;
+}
+.sched-head .pill { margin-left: auto; }
+.sched-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sched-actions { display: flex; gap: 9px; margin-top: 2px; }
+.sched-actions .btn { flex: 1; }
+
+/* --- catalogue de modèles ------------------------------------------------- */
 .model-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));

@@ -1,0 +1,221 @@
+/* ===========================================================================
+   Aurora France — vérification des prévisions
+   =========================================================================== */
+
+.verdict {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(420px, 1fr);
+  gap: 22px;
+  margin-bottom: 16px;
+}
+
+.verdict-main { display: flex; gap: 20px; align-items: flex-start; }
+.verdict-text { flex: 1; min-width: 0; }
+.verdict-text h2 {
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  text-transform: capitalize;
+  margin-bottom: 6px;
+}
+.verdict-text p { margin: 0 0 12px; font-size: 12.2px; line-height: 1.55; color: var(--text-dim); }
+
+.score-ring {
+  position: relative;
+  width: 124px;
+  height: 124px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(8, 12, 26, 0.94) 60%, transparent 61%),
+    conic-gradient(var(--ring-color, var(--muted)) calc(var(--ring) * 1%), rgba(255, 255, 255, 0.07) 0);
+  transition: background 0.5s ease;
+}
+.score-ring b {
+  display: block;
+  font-family: var(--mono);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ring-color, var(--text));
+}
+.score-ring span { font-size: 10.5px; color: var(--muted); letter-spacing: 0.08em; }
+
+.run-row { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.hint { font-size: 10.8px; color: var(--muted); line-height: 1.5; margin: 8px 0 0; }
+
+/* --- barres journalières -------------------------------------------------- */
+
+.day-bars { display: flex; align-items: flex-end; gap: 6px; height: 122px; }
+.day-bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; height: 100%; }
+.day-bar i {
+  display: block;
+  border-radius: 6px 6px 3px 3px;
+  min-height: 3px;
+  transition: height 0.45s cubic-bezier(0.3, 0.9, 0.4, 1);
+}
+.day-bar b { font-family: var(--mono); font-size: 11px; text-align: center; font-weight: 600; }
+.day-bar small { font-size: 9.5px; color: var(--muted); text-align: center; }
+
+/* --- tableaux de variables ------------------------------------------------ */
+
+.var-table { display: flex; flex-direction: column; gap: 4px; }
+.var-row {
+  display: grid;
+  grid-template-columns: 82px 1fr 62px 46px;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 11.5px;
+}
+.var-table.wide .var-row { grid-template-columns: 88px 1fr 84px 84px 52px 40px; }
+.var-row > span:first-child { color: var(--text-dim); font-weight: 600; }
+.var-row .num {
+  font-family: var(--mono);
+  text-align: right;
+  color: var(--text-dim);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.var-track { height: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+.var-track > i { display: block; height: 100%; border-radius: 4px; transition: width 0.45s ease; }
+.var-row .note { font-family: var(--mono); font-weight: 700; text-align: right; }
+.var-head {
+  display: grid;
+  grid-template-columns: 88px 1fr 84px 84px 52px 40px;
+  gap: 9px;
+  padding: 0 8px 3px;
+  font-size: 9.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.var-head span:nth-child(n + 3) { text-align: right; }
+
+/* --- grille principale ---------------------------------------------------- */
+
+.verify-grid {
+  display: grid;
+  grid-template-columns: 330px 1fr 320px;
+  gap: 16px;
+  align-items: start;
+}
+
+/* --- liste des réseaux ---------------------------------------------------- */
+
+.run-list { display: flex; flex-direction: column; gap: 7px; max-height: 720px; overflow-y: auto; }
+.run-item {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 11px;
+  border-radius: 11px;
+  border: 1px solid var(--stroke);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, transform 0.12s;
+}
+.run-item:hover { border-color: var(--stroke-strong); background: rgba(255, 255, 255, 0.06); }
+.run-item.active { border-color: rgba(76, 201, 255, 0.55); background: rgba(76, 201, 255, 0.09); }
+.run-item.pending { opacity: 0.55; }
+.run-item b { display: block; font-size: 12.2px; font-weight: 600; }
+.run-item span { display: block; font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.run-item .note {
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 700;
+  text-align: right;
+  line-height: 1;
+}
+.run-item .note small { display: block; font-size: 8.5px; font-weight: 500; color: var(--muted); }
+
+/* --- détail --------------------------------------------------------------- */
+
+.detail-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 13px; }
+.detail-head h3 { font-size: 15.5px; margin-top: 3px; }
+.detail-head .sub { font-size: 10.8px; color: var(--muted); margin-top: 3px; }
+.detail-score {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: right;
+}
+.detail-score small { display: block; font-size: 10px; font-weight: 500; color: var(--muted); margin-top: 3px; }
+
+.day-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.day-chip {
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+  min-width: 62px;
+}
+.day-chip b { display: block; font-family: var(--mono); font-size: 14px; font-weight: 700; line-height: 1.1; }
+.day-chip small { display: block; font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+
+.chart-block { margin-top: 4px; }
+.chart-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 7px;
+  font-size: 12px;
+}
+.chart-head span { font-size: 10.5px; color: var(--muted); margin-left: auto; }
+.chart { width: 100%; height: 150px; display: block; }
+.chart.tall { height: 190px; }
+
+.legend-inline { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.swatch.pred { background: #4cc9ff; }
+.swatch.obs { background: #3ddc97; margin-left: 8px; }
+
+.compare-controls { display: flex; gap: 9px; margin: 9px 0 11px; }
+.compare-controls select { flex: 1; }
+
+/* --- villes --------------------------------------------------------------- */
+
+.city-list { display: flex; flex-direction: column; gap: 4px; max-height: 620px; overflow-y: auto; }
+.city-row {
+  display: grid;
+  grid-template-columns: 1fr 78px 40px;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  font-size: 11.8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+.city-row .note { font-family: var(--mono); font-weight: 700; text-align: right; font-size: 12px; }
+.city-row .bar { height: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+.city-row .bar > i { display: block; height: 100%; border-radius: 4px; }
+
+.empty-note {
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 11.8px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+@media (max-width: 1500px) {
+  .verdict { grid-template-columns: 1fr; }
+  .verify-grid { grid-template-columns: 300px 1fr; }
+  .verify-grid > section:last-child { grid-column: 1 / -1; }
+}

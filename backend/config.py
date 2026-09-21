@@ -59,6 +59,10 @@ RENDER_STEP = 0.1
 # Pas de temps de base du modèle Aurora (heures).
 BASE_TIMESTEP_H = 6
 
+# Délai de publication de la réanalyse ERA5 (jours). Aucun réseau plus récent
+# n'est disponible : il borne à la fois les prévisions et leur vérification.
+ERA5_LATENCY_DAYS = int(os.environ.get("AURORA_ERA5_LATENCY_DAYS", "6"))
+
 MAX_STEPS = 40  # 40 x 6 h = 10 jours
 
 # Répertoire de cache HuggingFace utilisé pour les poids Aurora.

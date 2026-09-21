@@ -122,6 +122,21 @@ def index() -> list[dict]:
     return metas
 
 
+def read_payload(forecast_id: str) -> dict | None:
+    """Métadonnées et séries par ville, sans ouvrir l'archive des champs."""
+    folder = _dir(forecast_id)
+    if not folder.is_dir():
+        return None
+    try:
+        payload = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    meta = payload.get("meta")
+    if not isinstance(meta, dict) or "id" not in meta:
+        return None
+    return {"meta": meta, "cities": payload.get("cities", [])}
+
+
 def load(forecast_id: str) -> dict | None:
     """Recharge une prévision complète (métadonnées, villes et champs)."""
     folder = _dir(forecast_id)

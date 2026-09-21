@@ -217,3 +217,160 @@ export function rankBar(value, domain, palette) {
     color: colorAt(palette, Math.max(0, Math.min(1, t))),
   };
 }
+
+/* ==========================================================================
+   Vérification : notes et comparaison prévu / observé
+   ========================================================================== */
+
+/** Rouge (note nulle) → vert (note parfaite), en passant par l'orange. */
+export function scoreColor(score, alpha = 1) {
+  if (score === null || score === undefined) return `rgba(120,132,158,${alpha})`;
+  const t = Math.max(0, Math.min(100, score)) / 100;
+  const hue = 4 + t * 138;
+  const light = 46 + t * 12;
+  return `hsla(${hue.toFixed(0)}, 78%, ${light.toFixed(0)}%, ${alpha})`;
+}
+
+/**
+ * Profil de la note en fonction de l'échéance : la dégradation avec le temps
+ * est la signature attendue de toute prévision numérique.
+ */
+export function drawScoreProfile(canvas, points) {
+  const { ctx, w, h } = setup(canvas);
+  if (!points.length) return;
+
+  const padL = 28;
+  const padR = 10;
+  const padT = 10;
+  const padB = 20;
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
+  const maxLead = Math.max(...points.map((p) => p.lead)) || 1;
+
+  const X = (lead) => padL + (lead / maxLead) * plotW;
+  const Y = (score) => padT + plotH - (score / 100) * plotH;
+
+  ctx.save();
+  ctx.font = '9px system-ui, sans-serif';
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  ctx.fillStyle = 'rgba(150,162,190,0.75)';
+  ctx.textAlign = 'right';
+  for (let v = 0; v <= 100; v += 25) {
+    const y = Y(v);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(w - padR, y);
+    ctx.stroke();
+    ctx.fillText(String(v), padL - 5, y + 3);
+  }
+  ctx.textAlign = 'center';
+  for (const lead of [24, 48, 72, 96, 120, 144, 168, 192, 216, 240]) {
+    if (lead > maxLead) break;
+    ctx.fillStyle = 'rgba(140,152,178,0.6)';
+    ctx.fillText(`J+${lead / 24}`, X(lead), h - padB + 12);
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(X(points[0].lead), padT + plotH);
+  for (const p of points) ctx.lineTo(X(p.lead), Y(p.score));
+  ctx.lineTo(X(points[points.length - 1].lead), padT + plotH);
+  ctx.closePath();
+  const area = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+  area.addColorStop(0, 'rgba(61,220,151,0.26)');
+  area.addColorStop(1, 'rgba(255,107,122,0.05)');
+  ctx.fillStyle = area;
+  ctx.fill();
+
+  ctx.beginPath();
+  points.forEach((p, i) => (i === 0 ? ctx.moveTo : ctx.lineTo).call(ctx, X(p.lead), Y(p.score)));
+  ctx.strokeStyle = 'rgba(233,237,248,0.9)';
+  ctx.lineWidth = 1.8;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  for (const p of points) {
+    ctx.beginPath();
+    ctx.arc(X(p.lead), Y(p.score), 3, 0, Math.PI * 2);
+    ctx.fillStyle = scoreColor(p.score);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Superposition de la série prévue et de l'analyse ERA5 correspondante. */
+export function drawCompare(canvas, opts) {
+  const { ctx, w, h } = setup(canvas);
+  const { times = [], predicted = [], observed = [], decimals = 1 } = opts;
+  const n = Math.min(times.length, predicted.length, observed.length);
+  if (!n) return;
+
+  const padL = 34;
+  const padR = 10;
+  const padT = 12;
+  const padB = 20;
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
+
+  const all = [...predicted.slice(0, n), ...observed.slice(0, n)];
+  const lo = Math.min(...all);
+  const hi = Math.max(...all);
+  const pad = Math.max((hi - lo) * 0.14, Math.abs(hi) * 0.02 + 0.4);
+  const y0 = lo - pad;
+  const y1 = hi + pad;
+
+  const X = (i) => padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const Y = (v) => padT + plotH - ((v - y0) / (y1 - y0 || 1)) * plotH;
+
+  ctx.save();
+  ctx.font = '9px system-ui, sans-serif';
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.fillStyle = 'rgba(150,162,190,0.75)';
+  ctx.textAlign = 'right';
+  const step = niceStep(y1 - y0);
+  for (let v = Math.ceil(y0 / step) * step; v <= y1; v += step) {
+    const y = Y(v);
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(w - padR, y);
+    ctx.stroke();
+    ctx.fillText(v.toFixed(decimals), padL - 5, y + 3);
+  }
+  let prevDay = null;
+  ctx.textAlign = 'left';
+  for (let i = 0; i < n; i++) {
+    const day = DAY_FMT.format(new Date(times[i]));
+    if (day === prevDay) continue;
+    prevDay = day;
+    ctx.fillStyle = 'rgba(200,212,235,0.7)';
+    ctx.fillText(day, X(i) + 3, h - padB + 12);
+  }
+  ctx.restore();
+
+  // Écart entre les deux courbes : c'est lui qui porte l'information.
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(X(0), Y(predicted[0]));
+  for (let i = 1; i < n; i++) ctx.lineTo(X(i), Y(predicted[i]));
+  for (let i = n - 1; i >= 0; i--) ctx.lineTo(X(i), Y(observed[i]));
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,107,122,0.16)';
+  ctx.fill();
+  ctx.restore();
+
+  const line = (values, color, dash) => {
+    ctx.save();
+    ctx.setLineDash(dash);
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) (i === 0 ? ctx.moveTo : ctx.lineTo).call(ctx, X(i), Y(values[i]));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.9;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    ctx.restore();
+  };
+  line(observed, 'rgba(61,220,151,0.95)', []);
+  line(predicted, 'rgba(76,201,255,0.95)', [4, 3]);
+}
+

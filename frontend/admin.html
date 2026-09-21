@@ -25,6 +25,7 @@
       <span class="pill muted" id="access-pill"><i class="dot"></i>Réseau…</span>
       <span class="pill muted" id="sse-pill"><i class="dot"></i>Flux…</span>
       <span class="pill muted" id="state-pill"><i class="dot"></i>—</span>
+      <a class="link-admin" href="/verify">🎯 Vérification</a>
       <a class="link-admin" href="/">↩ Retour à la carte</a>
     </div>
   </header>
@@ -104,6 +105,63 @@
             <button class="btn btn-sm" id="refresh-btn">↻ Rafraîchir</button>
           </div>
         </div>
+      </section>
+
+      <section class="glass panel">
+        <div class="section-title">Prévision quotidienne</div>
+        <div class="sched-head">
+          <label class="sched-toggle">
+            <input type="checkbox" id="sched-enabled">
+            <span>Relancer une prévision chaque jour</span>
+          </label>
+          <span class="pill muted" id="sched-pill"><i class="dot"></i>—</span>
+        </div>
+
+        <div class="sched-grid">
+          <div class="field">
+            <label for="sched-time">Heure de déclenchement (locale)</label>
+            <input type="time" id="sched-time" step="60" value="07:00">
+          </div>
+          <div class="field">
+            <label for="sched-source">Conditions initiales</label>
+            <select id="sched-source"></select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="sched-steps">Échéance : <b id="sched-steps-label" class="mono">120 h</b></label>
+          <input type="range" id="sched-steps" min="1" max="40" value="20">
+        </div>
+
+        <div class="field">
+          <label for="sched-members">Membres d'ensemble :
+            <b id="sched-members-label" class="mono">1</b></label>
+          <input type="range" id="sched-members" min="1" max="8" value="1">
+        </div>
+
+        <div class="sched-grid">
+          <div class="field">
+            <label for="sched-model">Modèle à charger si la mémoire est vide</label>
+            <select id="sched-model"></select>
+          </div>
+          <div class="field">
+            <label for="sched-device">Périphérique</label>
+            <select id="sched-device"></select>
+          </div>
+        </div>
+
+        <div class="sched-actions">
+          <button class="btn btn-primary btn-sm" id="sched-save">Enregistrer</button>
+          <button class="btn btn-sm" id="sched-run">▶ Lancer maintenant</button>
+        </div>
+
+        <div class="spec-list" id="sched-status" style="margin-top:12px"></div>
+        <p style="font-size:10.8px;color:var(--muted);line-height:1.5;margin:10px 0 0">
+          Le réseau d'initialisation n'est pas figé : la station retient le plus récent
+          que la source sache fournir — ERA5 accuse environ cinq jours de délai de
+          publication. Une seule exécution par jour ; si la machine était éteinte à
+          l'heure dite, la prévision est rattrapée dans les deux heures qui suivent.
+        </p>
       </section>
 
       <section class="glass panel">

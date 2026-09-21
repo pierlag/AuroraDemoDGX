@@ -133,6 +133,68 @@ consommée) — à comparer à ~250 pour la moyenne européenne ou ~350 en Allem
 
 ---
 
+## La vérification des prévisions
+
+Page `/verify`. Une fois plusieurs jours d'historique accumulés, chaque prévision
+est confrontée à ce qu'il s'est réellement passé : l'**analyse ERA5** aux mêmes
+dates de validité, échantillonnée au point de grille le plus proche de chacune des
+45 villes de référence. C'est l'étalon employé par Microsoft pour évaluer Aurora,
+et c'est déjà la source des conditions initiales : la comparaison est donc
+homogène.
+
+<table>
+<tr><td><b>Note par prévision</b></td><td>
+Une note sur 100 par réseau, moyenne pondérée des notes de chaque variable.
+</td></tr>
+<tr><td><b>Note par journée</b></td><td>
+J+1 à J+10 : la dégradation avec l'échéance, visible réseau par réseau et en
+moyenne sur tout l'historique.
+</td></tr>
+<tr><td><b>Détail par variable</b></td><td>
+Erreur absolue moyenne, RMSE, biais systématique et gain sur la persistance.
+</td></tr>
+<tr><td><b>Notes par ville</b></td><td>
+Classement des villes : le relief et les littoraux ressortent immédiatement.
+</td></tr>
+<tr><td><b>Prévu contre observé</b></td><td>
+Superposition des deux séries pour une ville et une variable, écart ombré.
+</td></tr>
+</table>
+
+### Le barème
+
+Chaque variable dispose d'une **tolérance de référence** : l'erreur absolue
+moyenne d'un bon modèle global à trois ou quatre jours d'échéance. La note vaut
+`100 × 2^(− erreur / tolérance)` : 100 pour une prévision exacte, 50 à la
+tolérance, 25 au double.
+
+| Variable | Tolérance | Poids | | Variable | Tolérance | Poids |
+|---|---|---|---|---|---|---|
+| Température 2 m | 1,5 °C | 0,22 | | Nuages | 22 % | 0,06 |
+| Vent 10 m | 7 km/h | 0,16 | | Rafales | 12 km/h | 0,06 |
+| Pression mer | 2,5 hPa | 0,16 | | Pluie | 0,8 mm/h | 0,06 |
+| Humidité | 10 % | 0,10 | | T 850 hPa | 1,5 °C | 0,10 |
+| Z 500 hPa | 3 dam | 0,08 | | | | |
+
+Le poids d'une variable est modulé par le nombre de comparaisons réellement
+disponibles : une variable observée sur une seule journée ne pèse pas autant
+qu'une variable suivie sur toute la séquence.
+
+Le **gain sur la persistance** compare l'erreur quadratique du modèle à celle de
+l'hypothèse « demain = aujourd'hui ». Un modèle qui ne la bat pas n'apporte
+rien ; Aurora dépasse couramment 90 % de réduction sur la température.
+
+### Disponibilité de la vérité terrain
+
+ERA5 est publiée avec environ **cinq jours de décalage** : les échéances les plus
+récentes restent non vérifiables et la prévision est notée « partielle ». Les
+journées déjà téléchargées pour les conditions initiales sont réutilisées telles
+quelles ; les journées manquantes sont récupérées sous forme d'extraits restreints
+à la France (environ 250 ko par jour, contre 540 Mo pour un état initial complet)
+dans `data/cache/era5_verif/`.
+
+---
+
 ## La console d'administration
 
 - **Ressources machine** — CPU, RAM, VRAM par GPU, disque, rafraîchies toutes
@@ -148,6 +210,26 @@ consommée) — à comparer à ~250 pour la moyenne européenne ou ~350 en Allem
   `pip` diffusée en direct.
 - **Journal temps réel** — flux SSE de tous les événements du serveur.
 - **Cache des poids** — inventaire et purge.
+
+### Prévision quotidienne
+
+La console permet de programmer une **exécution automatique par jour**, à l'heure
+locale de votre choix, avec ses propres paramètres : conditions initiales,
+nombre d'échéances et membres d'ensemble.
+
+- Le **réseau d'initialisation n'est pas figé** : la station retient le plus
+  récent que la source sache fournir — ERA5 accuse environ cinq jours de délai.
+- Un **modèle de secours** peut être désigné : si la mémoire est vide à l'heure
+  dite (redémarrage du serveur, déchargement manuel), il est chargé avant
+  l'inférence.
+- Une seule exécution par jour, avec **rattrapage de deux heures** si la machine
+  était éteinte à l'heure prévue.
+- Le bouton *Lancer maintenant* déclenche immédiatement la même séquence, sans
+  toucher à la programmation.
+
+Le réglage est écrit dans `data/state/schedule.json` et survit au redémarrage,
+avec la date du dernier déclenchement pour qu'un redémarrage ne relance pas deux
+fois la même journée.
 
 ---
 
@@ -284,6 +366,8 @@ backend/
   model_manager.py  machine à états du modèle, pré-vol, cache, installation
   forecast.py       file de travaux, rollout, extraction France, quantification
   storage.py        persistance des prévisions (index, chargement, suppression)
+  scheduler.py      prévision quotidienne automatique
+  verification.py   confrontation à l'analyse ERA5 et notation sur 100
   energy.py         mesure d'énergie GPU et empreinte carbone
   simulation.py     moteur atmosphérique local
   data_sources.py   ERA5/CDS, disponibilité des sources
@@ -296,11 +380,13 @@ backend/
 frontend/
   index.html        vue prévision
   admin.html        console d'administration
+  verify.html       vérification et notation
   js/mapview.js     moteur de rendu cartographique
-  js/charts.js      météogrammes
+  js/charts.js      météogrammes et graphiques de vérification
   js/colormaps.js   palettes et LUT
   js/app.js         orchestration de la vue prévision
   js/admin.js       orchestration de l'administration
+  js/verify.js      orchestration de la vérification
 ```
 
 Les champs sont transmis quantifiés sur 16 bits en base64 (~47 ko par échéance
@@ -314,6 +400,10 @@ laisse jamais d'entrée corrompue. Seuls les champs des quatre dernières
 prévisions consultées restent en mémoire ; les autres sont relus à la demande.
 La limite d'entrées conservées se règle avec `AURORA_MAX_STORED_FORECASTS`
 (40 par défaut).
+
+Le rapport de vérification d'une prévision est écrit à côté d'elle, dans
+`data/forecasts/{id}/verification.json` : il survit au redémarrage et n'est
+recalculé que si de nouvelles journées ERA5 deviennent disponibles.
 
 ---
 

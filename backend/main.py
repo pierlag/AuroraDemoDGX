@@ -32,7 +32,7 @@ from .system_info import (
     local_addresses,
     system_snapshot,
 )
-from . import storage
+from . import scheduler, storage, verification
 from .tunnel import tunnel
 
 
@@ -128,6 +128,7 @@ async def lifespan(_app: FastAPI):
         f"Historique : {stored['count']} prévision(s) sur disque "
         f"({stored['bytes'] / 1024**2:.1f} Mo)",
     )
+    scheduler.start()
     strays = cities_outside_france()
     if strays:
         bus.log(
@@ -166,6 +167,23 @@ class PublishRequest(BaseModel):
     repo: str = Field(min_length=3, max_length=201)
 
 
+class VerifyRequest(BaseModel):
+    ids: list[str] | None = None
+    download: bool = True
+    force: bool = False
+
+
+class ScheduleRequest(BaseModel):
+    enabled: bool | None = None
+    time: str | None = None
+    source: str | None = None
+    steps: int | None = Field(default=None, ge=1, le=MAX_STEPS)
+    members: int | None = Field(default=None, ge=1, le=8)
+    model_id: str | None = None
+    device: str | None = None
+    use_lora: bool | None = None
+
+
 # ---------------------------------------------------------------------------
 # Métadonnées
 # ---------------------------------------------------------------------------
@@ -188,6 +206,7 @@ def bootstrap(request: Request) -> dict:
         "max_steps": MAX_STEPS,
         "tunnel": tunnel.snapshot(),
         "github": github.snapshot(),
+        "schedule": scheduler.snapshot(),
         "access": {
             "client": request.client.host if request.client else None,
             "local_client": _is_loopback(request.client.host if request.client else ""),
@@ -376,6 +395,70 @@ def forecast_point(
 
 
 # ---------------------------------------------------------------------------
+# Prévision quotidienne planifiée
+# ---------------------------------------------------------------------------
+
+
+@api.get("/schedule")
+def schedule_state() -> dict:
+    return scheduler.snapshot()
+
+
+@api.post("/schedule", dependencies=ADMIN)
+def schedule_update(req: ScheduleRequest) -> dict:
+    try:
+        return scheduler.update(req.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@api.post("/schedule/run", dependencies=ADMIN)
+def schedule_run_now() -> dict:
+    try:
+        return scheduler.run_now()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# Vérification face à l'analyse ERA5
+# ---------------------------------------------------------------------------
+
+
+@api.get("/verification")
+def verification_index() -> dict:
+    return verification.index()
+
+
+@api.get("/verification/state")
+def verification_state() -> dict:
+    return verification.snapshot()
+
+
+@api.post("/verification/run", dependencies=ADMIN)
+def verification_run(req: VerifyRequest) -> dict:
+    for forecast_id in req.ids or []:
+        if not storage.valid_id(forecast_id):
+            raise HTTPException(status_code=422, detail="Identifiant de prévision invalide")
+    try:
+        return verification.start(req.ids, download=req.download, force=req.force)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@api.get("/verification/{forecast_id}")
+def verification_detail(forecast_id: str) -> dict:
+    if not storage.valid_id(forecast_id):
+        raise HTTPException(status_code=422, detail="Identifiant de prévision invalide")
+    report = verification.load_report(forecast_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Prévision pas encore vérifiée")
+    payload = storage.read_payload(forecast_id)
+    return {"report": report, "forecast": payload["meta"] if payload else None,
+            "cities": payload["cities"] if payload else []}
+
+
+# ---------------------------------------------------------------------------
 # Tunnel public
 # ---------------------------------------------------------------------------
 
@@ -550,6 +633,11 @@ def index() -> FileResponse:
 @app.get("/admin")
 def admin() -> FileResponse:
     return FileResponse(FRONTEND_DIR / "admin.html")
+
+
+@app.get("/verify")
+def verify() -> FileResponse:
+    return FileResponse(FRONTEND_DIR / "verify.html")
 
 
 app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
